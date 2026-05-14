@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+ <meta charset="UTF-8">
+ <title>Knottingham</title>
+ <link rel="icon" href="https://fi-le.net/images/favicon.png">
+ <meta author content="fi-le">
+ <meta name="keywords" content="Knot Theory, Knottingham, Knots">
+ <script type="text/javascript" src="https://unpkg.com/paper@0.12.17/dist/paper-full.min.js"></script>
+ <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/big-integer@1.6.52/BigInteger.min.js"></script>
+ <script type="text/javascript" src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+ <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+ <script type="text/javascript" src="https://sagecell.sagemath.org/static/embedded_sagecell.js"></script>
+ <script type="text/javascript" src="js/polynomials.js"></script>
+ <script type="text/javascript" src="js/knotTools.js"></script>
+ <script type="text/paperscript" canvas="canvas" src="js/canvas.js"></script>
+ <link rel="stylesheet" type="text/css" href="stylesheet.css">
+</head>
+<body>
+ <div style="text-align:center;">
+ <div style="margin:0px; padding:0px;">
+ <canvas id="canvas" width="1000px;" height="450px;"></canvas>
+ <p style="font-family: monospace;" id="log"></p>
+ </div>
+ <div style="margin:1%;">
+ <div style="display: grid;grid-template-columns: 1.5fr 1fr;align-items: center;">
+ <p><b>Alexander Polynomial:</b> <span id="alexanderPolynomial"></span></p>
+ <p style="display:none;" id="jonesContainer"><b>Jones Polynomial:</b> <span id="jonesPolynomial"></span></p>
+ <p style="display:none;" id="homflyContainer"><b>HOMFLY Polynomial:</b> <span id="homflyPolynomial" style="font-family:monospace;"></span></p>
+ <p><b>Gauss</b>: <span id="gauss" style="font-family: monospace;"></span> <br> <b>Dowker-Thislethwaite</b>: <span id="dt" style="font-family: monospace;"></span></p>
+ <p id="candidates-p"><b><!--Candidates with \(<10\) Crossings:--></b> <span id="candidates"></span></p>
+ </div>
+ <hr>
+ <p>
+ <button type="button" onclick="window.globals.draw(); isomorphy.checked = false; smoothing.checked = false; window.globals.switchIsomorphy(); window.globals.isomorphy = false;"><b>Draw from Scratch</b></button>
+ <button type="button" onclick="window.globals.select()">Show / Hide Bezier Handles</button>
+ <button type="button" onclick="window.globals.undo()">Undo</button>
+ <button type="button" onclick="window.globals.reflect()">Reflect</button>
+ </p>
+ <p>Force Smoothness: <input id="smoothing" type="checkbox" checked="true" onchange="window.globals.smooth = this.checked;">
+ | <button type="button" onclick="straighten()">Straighten</button>
+ <button type="button" onclick="window.globals.simplify()">Simplify</button>
+ <button type="button" onclick="window.globals.makeAlternating()">Make Alternating</button>
+ <button type="button" onclick="orthogonalise(this, dt.innerHTML, 'DT', 'Orthogonalize', 'Error')" id="orthButton">Orthogonalize (slow)</button> <br>
+ </p>
+ <p>Drag Neighboring Points: <input id="dragging" type="checkbox" checked="false" onchange="window.globals.neighbors = this.checked ? 2 : 0;"> | <b>Try reverting Non-Reidemeister moves:</b> <input type="checkbox" id="isomorphy" checked="true" onchange="window.globals.isomorphy = window.globals.torusMode ? false : this.checked; if (window.globals.torusMode) this.checked = false; window.globals.switchIsomorphy();"></p>
+ <p>
+ Additional Invariants, calculated once: <button type="button" onclick="getJones()" id="jonesButton">Jones Polynomial</button>
+ <button type="button" onclick="getHomfly()" id="homflyButton">HOMFLY Polynomial</button>
+ </p>
+ <p><b>Styling:</b><br>
+ Gap Width: <input type="range" min="2" max="5" value="2" step="0.1" class="slider" onchange="window.globals.gapWidth = this.value; window.globals.updateStyle();"><br>
+ Stroke Width: <input type="range" min="1" max="10" value="3" step="0.1" class="slider" onchange="window.globals.strokeWidth = this.value; window.globals.updateStyle();"><br>
+ Show Intersections: <input type="checkbox" id="showIntersections" onchange="window.globals.showIntersections = this.checked; if (window.globals.switchIsomorphy) window.globals.switchIsomorphy();">
+ Drag Handles Independently: <input type="checkbox" id="dragIndependently" onchange="window.globals.independentHandles = this.checked;">
+ </p>
+ <p><b>Experimental Torus mode:</b><br>
+ Torus mode: <input type="checkbox" id="torusMode">
+ Show universal cover: <input type="checkbox" id="showUniversalCover"><br>
+ Cover radius: <input type="number" id="coverRadius" min="0" max="3" step="1" value="1">
+ Torus W: <input type="number" id="torusWidth" value="500">
+ Torus H: <input type="number" id="torusHeight" value="350"><br>
+ p: <input type="number" id="pqP" value="1" style="width:4em;">
+ q: <input type="number" id="pqQ" value="0" style="width:4em;">
+ <button type="button" onclick="window.globals.makePQCurve(pqP.value, pqQ.value)">Make (p,q)-curve</button><br>
+ <small>Torus mode draws the active curve together with its Z<sup>2</sup>-translates. The central rectangle is one fundamental domain. Classical planar invariants are disabled in Torus mode.</small>
+ </p>
+ <hr>
+ <p><b>Exporting:</b>
+ <button type="button" onclick="toSVG();">To SVG</button>
+ <button type="button" onclick="toJSON();">To JSON</button>
+ <button type="button" onclick="toTikz(); this.innerHTML='Export to TikZ (Copied to Clipboard!);'">To TikZ</button> <br>
+ <b>Importing:</b>
+ <button onclick="orthogonalise(this, dtInput.value, 'DT', 'From DT code:', 'Error: Try again in the format `x y z ...`');">From DT code:</button> <input type="text" id="dtInput" placeholder="4 6 2">
+ <button onclick="orthogonalise(this, rolfsenInput.value, 'Rolfsen', 'From Rolfsen Table:', 'Error: Try again in the format x_y');">From Rolfsen Table:</button> <input type="text" id="rolfsenInput" placeholder="10_161">
+ <p>From Knottingham JSON: </p><input type="file" id="file" accept=".JSON,.json,.knottingham" name="Load a Knottingham JSON file" oninput="readJSON(this.files[0])">
+ </p>
+ </div>
+ </div>
+ <div style="margin:5%;">
+ <h3>Manual</h3>
+ <p><b>Knottingham</b> is a tool that lets you draw and manipulate knot diagrams, sporting a clean yet somewhat hand-drawn look.</p>
+ </div>
+ <script src="main.js"></script>
+ <script src="https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"></script>
+</body>
+</html>
